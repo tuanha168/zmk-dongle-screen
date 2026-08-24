@@ -80,6 +80,13 @@ config DONGLE_SCREEN_FLIPPED
     help
       Should the screen orientation should be flipped in horizontal or vertical orientation?
 
+config DONGLE_SCREEN_BACKGROUND
+    bool "Use an external background image"
+    default n
+    help
+      Render the external LVGL image descriptor dongle_screen_background_img
+      behind the status widgets. The application must provide this symbol.
+
 config DONGLE_SCREEN_IDLE_TIMEOUT_S
     int "Screen idle timeout in seconds (0 = never off)"
     default 600
