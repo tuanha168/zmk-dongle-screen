@@ -35,6 +35,11 @@ static struct zmk_widget_wpm_status wpm_status_widget;
 static struct zmk_widget_mod_status mod_widget;
 #endif
 
+#if CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
+#include "widgets/keyboard_status.h"
+static struct zmk_widget_keyboard_status keyboard_status_widget;
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -91,7 +96,7 @@ lv_obj_t *zmk_display_status_screen()
     lv_obj_align(zmk_widget_dongle_battery_status_obj(&dongle_battery_status_widget), LV_ALIGN_BOTTOM_MID, 0, 0);
 #endif
 
-#if CONFIG_DONGLE_SCREEN_WPM_ACTIVE
+#if CONFIG_DONGLE_SCREEN_WPM_ACTIVE && !CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
     zmk_widget_wpm_status_init(&wpm_status_widget, screen);
 #if CONFIG_DONGLE_SCREEN_BACKGROUND
     make_widget_transparent(zmk_widget_wpm_status_obj(&wpm_status_widget));
@@ -104,7 +109,16 @@ lv_obj_t *zmk_display_status_screen()
 #if CONFIG_DONGLE_SCREEN_BACKGROUND
     make_widget_transparent(zmk_widget_layer_status_obj(&layer_status_widget));
 #endif
+#if CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
+    lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_TOP_LEFT, 20, 20);
+#else
     lv_obj_align(zmk_widget_layer_status_obj(&layer_status_widget), LV_ALIGN_CENTER, 0, 0);
+#endif
+#endif
+
+#if CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
+    zmk_widget_keyboard_status_init(&keyboard_status_widget, screen);
+    lv_obj_align(zmk_widget_keyboard_status_obj(&keyboard_status_widget), LV_ALIGN_CENTER, 0, -15);
 #endif
 
 #if CONFIG_DONGLE_SCREEN_MODIFIER_ACTIVE
@@ -112,7 +126,11 @@ lv_obj_t *zmk_display_status_screen()
 #if CONFIG_DONGLE_SCREEN_BACKGROUND
     make_widget_transparent(zmk_widget_mod_status_obj(&mod_widget));
 #endif
+#if CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
+    lv_obj_align(zmk_widget_mod_status_obj(&mod_widget), LV_ALIGN_CENTER, 0, 45);
+#else
     lv_obj_align(zmk_widget_mod_status_obj(&mod_widget), LV_ALIGN_CENTER, 0, 35);
+#endif
 #endif
 
     return screen;

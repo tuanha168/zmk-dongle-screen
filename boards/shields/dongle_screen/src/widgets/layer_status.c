@@ -66,7 +66,11 @@ int zmk_widget_layer_status_init(struct zmk_widget_layer_status *widget, lv_obj_
 {
     widget->obj = lv_label_create(parent);
 
+#if CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
+    lv_obj_set_style_text_font(widget->obj, &lv_font_montserrat_20, 0);
+#else
     lv_obj_set_style_text_font(widget->obj, &lv_font_montserrat_40, 0);
+#endif
 
     sys_slist_append(&widgets, &widget->node);
 

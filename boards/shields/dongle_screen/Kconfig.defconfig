@@ -87,6 +87,28 @@ config DONGLE_SCREEN_BACKGROUND
       Render the external LVGL image descriptor dongle_screen_background_img
       behind the status widgets. The application must provide this symbol.
 
+config DONGLE_SCREEN_KEYBOARD_STATUS
+    bool "Show the selected physical keyboard layout"
+    default n
+    help
+      Draw the selected ZMK physical layout and highlight pressed keys. When
+      disabled, the existing layer, WPM, and modifier layout is unchanged.
+
+config DONGLE_SCREEN_KEYBOARD_KEY_COLOR
+    hex "Keyboard key color"
+    default 0x303030
+    depends on DONGLE_SCREEN_KEYBOARD_STATUS
+
+config DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
+    hex "Pressed key color"
+    default 0x00FF66
+    depends on DONGLE_SCREEN_KEYBOARD_STATUS
+
+config DONGLE_SCREEN_KEYBOARD_BORDER_COLOR
+    hex "Keyboard key border color"
+    default 0xFFFFFF
+    depends on DONGLE_SCREEN_KEYBOARD_STATUS
+
 config DONGLE_SCREEN_IDLE_TIMEOUT_S
     int "Screen idle timeout in seconds (0 = never off)"
     default 600
