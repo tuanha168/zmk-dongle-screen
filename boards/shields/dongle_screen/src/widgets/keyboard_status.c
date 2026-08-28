@@ -29,9 +29,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct keyboard_status_state {
-    uint32_t position;
-    bool pressed;
-    bool valid;
+    bool pressed[ZMK_KEYMAP_LEN];
+    uint8_t press_count[ZMK_KEYMAP_LEN];
 };
 
 static void key_center(const struct zmk_key_physical_attrs *key, int32_t *x, int32_t *y)
@@ -129,6 +128,7 @@ static int draw_layout(struct zmk_widget_keyboard_status *widget)
 #if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
         widget->key_lit[i] = false;
         widget->key_pressed[i] = false;
+        widget->press_count[i] = 0;
 #endif
     }
 
@@ -263,56 +263,65 @@ static void start_ripple(struct zmk_widget_keyboard_status *widget, size_t origi
 
 static void keyboard_status_update_cb(struct keyboard_status_state state)
 {
-    if (!state.valid) {
-        return;
-    }
-
     struct zmk_widget_keyboard_status *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         for (size_t i = 0; i < widget->key_count; i++) {
             uint32_t position = widget->position_map ? widget->position_map[i] : i;
-            if (position != state.position) {
+            if (position >= ARRAY_SIZE(state.pressed)) {
                 continue;
             }
 
 #if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
-            widget->key_pressed[i] = state.pressed;
-            if (state.pressed) {
+            bool was_pressed = widget->key_pressed[i];
+            bool pressed = state.pressed[position];
+            bool new_press = widget->press_count[i] != state.press_count[position];
+
+            widget->key_pressed[i] = pressed;
+            widget->press_count[i] = state.press_count[position];
+
+            if (pressed && !was_pressed) {
                 lv_obj_set_style_bg_color(
                     widget->keys[i],
                     lv_color_hex(CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR), 0);
                 lv_obj_set_style_bg_opa(widget->keys[i], LV_OPA_COVER, 0);
                 widget->key_lit[i] = false;
-                start_ripple(widget, i);
-            } else {
+            } else if (!pressed && was_pressed) {
                 widget->key_lit[i] = true;
+            }
+
+            if (new_press) {
+                start_ripple(widget, i);
+            } else if (!pressed && was_pressed) {
                 render_ripples(widget);
             }
 #else
             lv_obj_set_style_bg_color(
                 widget->keys[i],
-                lv_color_hex(state.pressed ? CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
-                                           : CONFIG_DONGLE_SCREEN_KEYBOARD_KEY_COLOR),
+                lv_color_hex(state.pressed[position] ? CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
+                                                     : CONFIG_DONGLE_SCREEN_KEYBOARD_KEY_COLOR),
                 0);
-            lv_obj_set_style_bg_opa(widget->keys[i], state.pressed ? LV_OPA_COVER : LV_OPA_60, 0);
+            lv_obj_set_style_bg_opa(widget->keys[i],
+                                    state.pressed[position] ? LV_OPA_COVER : LV_OPA_60, 0);
 #endif
-            break;
         }
     }
 }
 
 static struct keyboard_status_state keyboard_status_get_state(const zmk_event_t *eh)
 {
-    if (eh == NULL) {
-        return (struct keyboard_status_state){.valid = false};
+    static struct keyboard_status_state state;
+
+    if (eh != NULL) {
+        const struct zmk_position_state_changed *event = as_zmk_position_state_changed(eh);
+        if (event->position < ARRAY_SIZE(state.pressed)) {
+            state.pressed[event->position] = event->state;
+            if (event->state) {
+                state.press_count[event->position]++;
+            }
+        }
     }
 
-    const struct zmk_position_state_changed *event = as_zmk_position_state_changed(eh);
-    return (struct keyboard_status_state){
-        .position = event->position,
-        .pressed = event->state,
-        .valid = true,
-    };
+    return state;
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_keyboard_status, struct keyboard_status_state,
