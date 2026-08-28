@@ -128,6 +128,7 @@ static int draw_layout(struct zmk_widget_keyboard_status *widget)
         widget->key_center_y[i] = y + height / 2;
 #if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
         widget->key_lit[i] = false;
+        widget->key_pressed[i] = false;
 #endif
     }
 
@@ -155,7 +156,26 @@ static bool render_ripples(struct zmk_widget_keyboard_status *widget)
     uint32_t now = lv_tick_get();
     bool any_active = false;
 
+    for (size_t ripple_index = 0; ripple_index < ARRAY_SIZE(widget->ripples); ripple_index++) {
+        struct keyboard_status_ripple *ripple = &widget->ripples[ripple_index];
+        if (!ripple->active) {
+            continue;
+        }
+
+        uint32_t elapsed = now - ripple->started_at;
+        uint32_t radius = elapsed * KEYBOARD_WIDTH / RIPPLE_TRAVEL_MS;
+        if (radius > KEYBOARD_WIDTH + RIPPLE_BAND_WIDTH) {
+            ripple->active = false;
+        } else {
+            any_active = true;
+        }
+    }
+
     for (size_t key_index = 0; key_index < widget->key_count; key_index++) {
+        if (widget->key_pressed[key_index]) {
+            continue;
+        }
+
         uint8_t strongest = 0;
         uint16_t hue = 0;
 
@@ -166,14 +186,7 @@ static bool render_ripples(struct zmk_widget_keyboard_status *widget)
                 continue;
             }
 
-            uint32_t elapsed = now - ripple->started_at;
-            uint32_t radius = elapsed * KEYBOARD_WIDTH / RIPPLE_TRAVEL_MS;
-            if (radius > KEYBOARD_WIDTH + RIPPLE_BAND_WIDTH) {
-                ripple->active = false;
-                continue;
-            }
-
-            any_active = true;
+            uint32_t radius = (now - ripple->started_at) * KEYBOARD_WIDTH / RIPPLE_TRAVEL_MS;
             uint16_t origin = ripple->origin_key;
             uint16_t distance = approximate_distance(
                 widget->key_center_x[origin], widget->key_center_y[origin],
@@ -263,8 +276,17 @@ static void keyboard_status_update_cb(struct keyboard_status_state state)
             }
 
 #if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
+            widget->key_pressed[i] = state.pressed;
             if (state.pressed) {
+                lv_obj_set_style_bg_color(
+                    widget->keys[i],
+                    lv_color_hex(CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR), 0);
+                lv_obj_set_style_bg_opa(widget->keys[i], LV_OPA_COVER, 0);
+                widget->key_lit[i] = false;
                 start_ripple(widget, i);
+            } else {
+                widget->key_lit[i] = true;
+                render_ripples(widget);
             }
 #else
             lv_obj_set_style_bg_color(

@@ -31,6 +31,7 @@ struct zmk_widget_keyboard_status {
     lv_timer_t *ripple_timer;
     struct keyboard_status_ripple ripples[KEYBOARD_STATUS_MAX_RIPPLES];
     bool key_lit[ZMK_KEYMAP_LEN];
+    bool key_pressed[ZMK_KEYMAP_LEN];
     uint16_t next_hue;
 #endif
 };
