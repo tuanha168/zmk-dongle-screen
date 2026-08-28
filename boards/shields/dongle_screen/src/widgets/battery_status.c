@@ -83,17 +83,17 @@ static bool is_peripheral_reconnecting(uint8_t source, uint8_t new_level)
 static void draw_battery(lv_obj_t *canvas, uint8_t level, bool usb_present)
 {
 
-    if (level < 1)
+    if (level <= 20)
     {
         lv_canvas_fill_bg(canvas, lv_palette_main(LV_PALETTE_RED), LV_OPA_COVER);
     }
-    else if (level <= 10)
+    else if (level <= 50)
     {
         lv_canvas_fill_bg(canvas, lv_palette_main(LV_PALETTE_YELLOW), LV_OPA_COVER);
     }
     else
     {
-        lv_canvas_fill_bg(canvas, lv_color_white(), LV_OPA_COVER);
+        lv_canvas_fill_bg(canvas, lv_palette_main(LV_PALETTE_GREEN), LV_OPA_COVER);
     }
 
     lv_draw_rect_dsc_t rect_fill_dsc;
