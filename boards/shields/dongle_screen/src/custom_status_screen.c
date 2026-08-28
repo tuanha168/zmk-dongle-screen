@@ -118,7 +118,7 @@ lv_obj_t *zmk_display_status_screen()
 
 #if CONFIG_DONGLE_SCREEN_KEYBOARD_STATUS
     zmk_widget_keyboard_status_init(&keyboard_status_widget, screen);
-    lv_obj_align(zmk_widget_keyboard_status_obj(&keyboard_status_widget), LV_ALIGN_CENTER, 0, -15);
+    lv_obj_align(zmk_widget_keyboard_status_obj(&keyboard_status_widget), LV_ALIGN_CENTER, 0, 0);
 #endif
 
 #if CONFIG_DONGLE_SCREEN_MODIFIER_ACTIVE

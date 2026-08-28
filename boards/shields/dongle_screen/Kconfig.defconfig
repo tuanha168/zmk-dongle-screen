@@ -99,10 +99,18 @@ config DONGLE_SCREEN_KEYBOARD_KEY_COLOR
     default 0x303030
     depends on DONGLE_SCREEN_KEYBOARD_STATUS
 
+config DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE
+    bool "Animate an RGB ripple from pressed keys"
+    default y
+    depends on DONGLE_SCREEN_KEYBOARD_STATUS
+    help
+      Light each pressed key and animate a rainbow wave across nearby keys
+      according to their positions in the selected physical layout.
+
 config DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
     hex "Pressed key color"
     default 0x00FF66
-    depends on DONGLE_SCREEN_KEYBOARD_STATUS
+    depends on DONGLE_SCREEN_KEYBOARD_STATUS && !DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE
 
 config DONGLE_SCREEN_KEYBOARD_BORDER_COLOR
     hex "Keyboard key border color"

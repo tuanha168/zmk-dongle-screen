@@ -21,6 +21,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define KEYBOARD_HEIGHT 70
 #define KEYBOARD_PADDING 3
 #define SCALE_PRECISION 1000
+#define RIPPLE_FRAME_MS 40
+#define RIPPLE_TRAVEL_MS 900
+#define RIPPLE_BAND_WIDTH 26
+#define RIPPLE_HUE_STEP 73
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
@@ -120,6 +124,11 @@ static int draw_layout(struct zmk_widget_keyboard_status *widget)
         lv_obj_set_style_border_width(key_obj, 1, 0);
         lv_obj_set_style_radius(key_obj, 2, 0);
         widget->keys[i] = key_obj;
+        widget->key_center_x[i] = x + width / 2;
+        widget->key_center_y[i] = y + height / 2;
+#if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
+        widget->key_lit[i] = false;
+#endif
     }
 
     int map_length = zmk_physical_layouts_get_selected_to_stock_position_map(&widget->position_map);
@@ -129,6 +138,115 @@ static int draw_layout(struct zmk_widget_keyboard_status *widget)
 
     return 0;
 }
+
+#if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
+static uint16_t approximate_distance(int16_t x1, int16_t y1, int16_t x2, int16_t y2)
+{
+    uint16_t dx = x1 > x2 ? x1 - x2 : x2 - x1;
+    uint16_t dy = y1 > y2 ? y1 - y2 : y2 - y1;
+    uint16_t longest = MAX(dx, dy);
+    uint16_t shortest = MIN(dx, dy);
+
+    return longest + shortest / 2;
+}
+
+static bool render_ripples(struct zmk_widget_keyboard_status *widget)
+{
+    uint32_t now = lv_tick_get();
+    bool any_active = false;
+
+    for (size_t key_index = 0; key_index < widget->key_count; key_index++) {
+        uint8_t strongest = 0;
+        uint16_t hue = 0;
+
+        for (size_t ripple_index = 0; ripple_index < ARRAY_SIZE(widget->ripples);
+             ripple_index++) {
+            struct keyboard_status_ripple *ripple = &widget->ripples[ripple_index];
+            if (!ripple->active) {
+                continue;
+            }
+
+            uint32_t elapsed = now - ripple->started_at;
+            uint32_t radius = elapsed * KEYBOARD_WIDTH / RIPPLE_TRAVEL_MS;
+            if (radius > KEYBOARD_WIDTH + RIPPLE_BAND_WIDTH) {
+                ripple->active = false;
+                continue;
+            }
+
+            any_active = true;
+            uint16_t origin = ripple->origin_key;
+            uint16_t distance = approximate_distance(
+                widget->key_center_x[origin], widget->key_center_y[origin],
+                widget->key_center_x[key_index], widget->key_center_y[key_index]);
+            uint16_t delta = distance > radius ? distance - radius : radius - distance;
+            if (delta >= RIPPLE_BAND_WIDTH) {
+                continue;
+            }
+
+            uint8_t intensity = 100 - delta * 100 / RIPPLE_BAND_WIDTH;
+            if (intensity > strongest) {
+                strongest = intensity;
+                hue = (ripple->hue + distance * 2) % 360;
+            }
+        }
+
+        if (strongest == 0) {
+            if (widget->key_lit[key_index]) {
+                lv_obj_set_style_bg_color(
+                    widget->keys[key_index],
+                    lv_color_hex(CONFIG_DONGLE_SCREEN_KEYBOARD_KEY_COLOR), 0);
+                lv_obj_set_style_bg_opa(widget->keys[key_index], LV_OPA_60, 0);
+                widget->key_lit[key_index] = false;
+            }
+            continue;
+        }
+
+        lv_obj_set_style_bg_color(widget->keys[key_index], lv_color_hsv_to_rgb(hue, 100, 100),
+                                  0);
+        lv_obj_set_style_bg_opa(widget->keys[key_index],
+                                LV_OPA_60 + strongest * (LV_OPA_COVER - LV_OPA_60) / 100, 0);
+        widget->key_lit[key_index] = true;
+    }
+
+    return any_active;
+}
+
+static void ripple_timer_cb(lv_timer_t *timer)
+{
+    struct zmk_widget_keyboard_status *widget = lv_timer_get_user_data(timer);
+    if (!render_ripples(widget)) {
+        lv_timer_pause(timer);
+    }
+}
+
+static void start_ripple(struct zmk_widget_keyboard_status *widget, size_t origin_key)
+{
+    struct keyboard_status_ripple *slot = &widget->ripples[0];
+    uint32_t now = lv_tick_get();
+
+    for (size_t i = 0; i < ARRAY_SIZE(widget->ripples); i++) {
+        if (!widget->ripples[i].active) {
+            slot = &widget->ripples[i];
+            break;
+        }
+
+        if (now - widget->ripples[i].started_at > now - slot->started_at) {
+            slot = &widget->ripples[i];
+        }
+    }
+
+    *slot = (struct keyboard_status_ripple){
+        .started_at = now,
+        .hue = widget->next_hue,
+        .origin_key = origin_key,
+        .active = true,
+    };
+    widget->next_hue = (widget->next_hue + RIPPLE_HUE_STEP) % 360;
+
+    render_ripples(widget);
+    lv_timer_resume(widget->ripple_timer);
+}
+#endif
 
 static void keyboard_status_update_cb(struct keyboard_status_state state)
 {
@@ -144,12 +262,18 @@ static void keyboard_status_update_cb(struct keyboard_status_state state)
                 continue;
             }
 
+#if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
+            if (state.pressed) {
+                start_ripple(widget, i);
+            }
+#else
             lv_obj_set_style_bg_color(
                 widget->keys[i],
                 lv_color_hex(state.pressed ? CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
                                            : CONFIG_DONGLE_SCREEN_KEYBOARD_KEY_COLOR),
                 0);
             lv_obj_set_style_bg_opa(widget->keys[i], state.pressed ? LV_OPA_COVER : LV_OPA_60, 0);
+#endif
             break;
         }
     }
@@ -186,6 +310,14 @@ int zmk_widget_keyboard_status_init(struct zmk_widget_keyboard_status *widget, l
     if (err < 0) {
         return err;
     }
+
+#if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
+    widget->ripple_timer = lv_timer_create(ripple_timer_cb, RIPPLE_FRAME_MS, widget);
+    if (widget->ripple_timer == NULL) {
+        return -ENOMEM;
+    }
+    lv_timer_pause(widget->ripple_timer);
+#endif
 
     sys_slist_append(&widgets, &widget->node);
     widget_keyboard_status_init();
