@@ -10,8 +10,6 @@
 #include <zephyr/kernel.h>
 #include <zmk/matrix.h>
 
-#define KEYBOARD_STATUS_MAX_RIPPLES 4
-
 struct keyboard_status_ripple {
     uint32_t started_at;
     uint16_t hue;
@@ -29,7 +27,7 @@ struct zmk_widget_keyboard_status {
     size_t key_count;
 #if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
     lv_timer_t *ripple_timer;
-    struct keyboard_status_ripple ripples[KEYBOARD_STATUS_MAX_RIPPLES];
+    struct keyboard_status_ripple ripples[CONFIG_DONGLE_SCREEN_KEYBOARD_MAX_RIPPLES];
     bool key_lit[ZMK_KEYMAP_LEN];
     bool key_pressed[ZMK_KEYMAP_LEN];
     uint8_t press_count[ZMK_KEYMAP_LEN];

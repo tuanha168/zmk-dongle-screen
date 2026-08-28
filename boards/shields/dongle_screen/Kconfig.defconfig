@@ -107,6 +107,15 @@ config DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE
       Light each pressed key and animate a rainbow wave across nearby keys
       according to their positions in the selected physical layout.
 
+config DONGLE_SCREEN_KEYBOARD_MAX_RIPPLES
+    int "Maximum simultaneous keyboard ripples"
+    default 2
+    range 1 4
+    depends on DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE
+    help
+      Ignore new ripple animations while this many are already active. The
+      newly pressed key still uses the normal static pressed-key highlight.
+
 config DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
     hex "Pressed key color"
     default 0x00FF66

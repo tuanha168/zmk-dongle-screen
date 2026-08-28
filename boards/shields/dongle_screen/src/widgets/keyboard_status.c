@@ -5,14 +5,12 @@
  */
 
 #include "keyboard_status.h"
+#include "keyboard_state.h"
 
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
 #include <zephyr/logging/log.h>
-#include <zmk/display.h>
-#include <zmk/event_manager.h>
-#include <zmk/events/position_state_changed.h>
 #include <zmk/physical_layouts.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -27,11 +25,6 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define RIPPLE_HUE_STEP 73
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
-
-struct keyboard_status_state {
-    bool pressed[ZMK_KEYMAP_LEN];
-    uint8_t press_count[ZMK_KEYMAP_LEN];
-};
 
 static void key_center(const struct zmk_key_physical_attrs *key, int32_t *x, int32_t *y)
 {
@@ -234,22 +227,21 @@ static void ripple_timer_cb(lv_timer_t *timer)
 
 static void start_ripple(struct zmk_widget_keyboard_status *widget, size_t origin_key)
 {
-    struct keyboard_status_ripple *slot = &widget->ripples[0];
-    uint32_t now = lv_tick_get();
+    struct keyboard_status_ripple *slot = NULL;
 
     for (size_t i = 0; i < ARRAY_SIZE(widget->ripples); i++) {
         if (!widget->ripples[i].active) {
             slot = &widget->ripples[i];
             break;
         }
+    }
 
-        if (now - widget->ripples[i].started_at > now - slot->started_at) {
-            slot = &widget->ripples[i];
-        }
+    if (slot == NULL) {
+        return;
     }
 
     *slot = (struct keyboard_status_ripple){
-        .started_at = now,
+        .started_at = lv_tick_get(),
         .hue = widget->next_hue,
         .origin_key = origin_key,
         .active = true,
@@ -261,23 +253,23 @@ static void start_ripple(struct zmk_widget_keyboard_status *widget, size_t origi
 }
 #endif
 
-static void keyboard_status_update_cb(struct keyboard_status_state state)
+void zmk_widget_keyboard_status_update(const struct keyboard_state_snapshot *state)
 {
     struct zmk_widget_keyboard_status *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         for (size_t i = 0; i < widget->key_count; i++) {
             uint32_t position = widget->position_map ? widget->position_map[i] : i;
-            if (position >= ARRAY_SIZE(state.pressed)) {
+            if (position >= ARRAY_SIZE(state->pressed)) {
                 continue;
             }
 
 #if IS_ENABLED(CONFIG_DONGLE_SCREEN_KEYBOARD_RGB_RIPPLE)
             bool was_pressed = widget->key_pressed[i];
-            bool pressed = state.pressed[position];
-            bool new_press = widget->press_count[i] != state.press_count[position];
+            bool pressed = state->pressed[position];
+            bool new_press = widget->press_count[i] != state->press_count[position];
 
             widget->key_pressed[i] = pressed;
-            widget->press_count[i] = state.press_count[position];
+            widget->press_count[i] = state->press_count[position];
 
             if (pressed && !was_pressed) {
                 lv_obj_set_style_bg_color(
@@ -297,36 +289,15 @@ static void keyboard_status_update_cb(struct keyboard_status_state state)
 #else
             lv_obj_set_style_bg_color(
                 widget->keys[i],
-                lv_color_hex(state.pressed[position] ? CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
-                                                     : CONFIG_DONGLE_SCREEN_KEYBOARD_KEY_COLOR),
+                lv_color_hex(state->pressed[position] ? CONFIG_DONGLE_SCREEN_KEYBOARD_PRESSED_COLOR
+                                                      : CONFIG_DONGLE_SCREEN_KEYBOARD_KEY_COLOR),
                 0);
             lv_obj_set_style_bg_opa(widget->keys[i],
-                                    state.pressed[position] ? LV_OPA_COVER : LV_OPA_60, 0);
+                                    state->pressed[position] ? LV_OPA_COVER : LV_OPA_60, 0);
 #endif
         }
     }
 }
-
-static struct keyboard_status_state keyboard_status_get_state(const zmk_event_t *eh)
-{
-    static struct keyboard_status_state state;
-
-    if (eh != NULL) {
-        const struct zmk_position_state_changed *event = as_zmk_position_state_changed(eh);
-        if (event->position < ARRAY_SIZE(state.pressed)) {
-            state.pressed[event->position] = event->state;
-            if (event->state) {
-                state.press_count[event->position]++;
-            }
-        }
-    }
-
-    return state;
-}
-
-ZMK_DISPLAY_WIDGET_LISTENER(widget_keyboard_status, struct keyboard_status_state,
-                            keyboard_status_update_cb, keyboard_status_get_state)
-ZMK_SUBSCRIPTION(widget_keyboard_status, zmk_position_state_changed);
 
 int zmk_widget_keyboard_status_init(struct zmk_widget_keyboard_status *widget, lv_obj_t *parent)
 {
@@ -351,7 +322,7 @@ int zmk_widget_keyboard_status_init(struct zmk_widget_keyboard_status *widget, l
 #endif
 
     sys_slist_append(&widgets, &widget->node);
-    widget_keyboard_status_init();
+    zmk_widget_keyboard_state_listener_init();
     return 0;
 }
 
